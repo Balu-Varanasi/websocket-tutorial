@@ -1,15 +1,23 @@
 {
   "name": "websocket-tutorial",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A secure WebSocket server and client implementation",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
+    "start:client": "node client.js",
+    "dev": "nodemon server.js",
+    "dev:client": "nodemon client.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["websocket", "realtime", "nodejs"],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "websocket": "^1.0.35"
+    "websocket": "^1.0.35",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
   }
 }

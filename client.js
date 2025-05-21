@@ -1,34 +1,124 @@
-#!/Users/balu/.nvm/versions/node/v21.7.1/bin node
-var WebSocketClient = require('websocket').client;
+#!/usr/bin/env node
+const WebSocketClient = require('websocket').client;
+const dotenv = require('dotenv');
 
-var client = new WebSocketClient();
+// Load environment variables
+dotenv.config();
 
-client.on('connectFailed', function(error) {
-    console.log('Connect Error: ' + error.toString());
-});
+// Configuration
+const WS_URL = process.env.WS_URL || 'ws://localhost:8080/';
+const RECONNECT_INTERVAL = process.env.RECONNECT_INTERVAL || 5000;
+const MESSAGE_INTERVAL = process.env.MESSAGE_INTERVAL || 1000;
 
-client.on('connect', function(connection) {
-    console.log('WebSocket Client Connected');
-    connection.on('error', function(error) {
-        console.log("Connection Error: " + error.toString());
-    });
-    connection.on('close', function() {
-        console.log('echo-protocol Connection Closed');
-    });
-    connection.on('message', function(message) {
+class WebSocketManager {
+    constructor() {
+        this.client = new WebSocketClient();
+        this.connection = null;
+        this.reconnectTimeout = null;
+        this.messageTimeout = null;
+        this.isConnecting = false;
+        this.setupClientEvents();
+    }
+
+    setupClientEvents() {
+        this.client.on('connectFailed', this.handleConnectFailed.bind(this));
+        this.client.on('connect', this.handleConnect.bind(this));
+    }
+
+    handleConnectFailed(error) {
+        console.log('Connect Error:', error.toString());
+        this.scheduleReconnect();
+    }
+
+    handleConnect(connection) {
+        this.connection = connection;
+        this.isConnecting = false;
+        console.log('WebSocket Client Connected');
+
+        connection.on('error', this.handleConnectionError.bind(this));
+        connection.on('close', this.handleConnectionClose.bind(this));
+        connection.on('message', this.handleMessage.bind(this));
+
+        // Start sending messages
+        this.startSendingMessages();
+    }
+
+    handleConnectionError(error) {
+        console.log("Connection Error:", error.toString());
+    }
+
+    handleConnectionClose() {
+        console.log('Connection Closed');
+        this.cleanup();
+        this.scheduleReconnect();
+    }
+
+    handleMessage(message) {
         if (message.type === 'utf8') {
-            console.log("Received: '" + message.utf8Data + "'");
-        }
-    });
-    
-    function sendNumber() {
-        if (connection.connected) {
-            var number = Math.round(Math.random() * 0xFFFFFF);
-            connection.sendUTF(number.toString());
-            setTimeout(sendNumber, 1000);
+            console.log("Received:", message.utf8Data);
         }
     }
-    sendNumber();
+
+    cleanup() {
+        if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+            this.messageTimeout = null;
+        }
+        this.connection = null;
+    }
+
+    scheduleReconnect() {
+        if (!this.isConnecting) {
+            this.isConnecting = true;
+            console.log(`Scheduling reconnect in ${RECONNECT_INTERVAL}ms`);
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout);
+            }
+            this.reconnectTimeout = setTimeout(() => {
+                this.connect();
+            }, RECONNECT_INTERVAL);
+        }
+    }
+
+    startSendingMessages() {
+        const sendNumber = () => {
+            try {
+                if (this.connection && this.connection.connected) {
+                    const number = Math.round(Math.random() * 0xFFFFFF);
+                    this.connection.sendUTF(number.toString());
+                    this.messageTimeout = setTimeout(sendNumber, MESSAGE_INTERVAL);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+            }
+        };
+        sendNumber();
+    }
+
+    connect() {
+        try {
+            console.log(`Connecting to ${WS_URL}`);
+            this.client.connect(WS_URL, 'echo-protocol');
+        } catch (error) {
+            console.error('Error initiating connection:', error);
+            this.scheduleReconnect();
+        }
+    }
+}
+
+// Create and start the WebSocket manager
+const wsManager = new WebSocketManager();
+wsManager.connect();
+
+// Handle process termination
+process.on('SIGINT', () => {
+    console.log('Received SIGINT. Cleaning up...');
+    if (wsManager.connection) {
+        wsManager.connection.close();
+    }
+    process.exit(0);
 });
 
-client.connect('ws://localhost:8080/', 'echo-protocol');
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
