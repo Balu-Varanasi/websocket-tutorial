@@ -65,44 +65,69 @@ wsServer.on('request', function(request) {
         return;
     }
 
+    let connection;
     try {
-        const connection = request.accept('echo-protocol', request.origin);
-        currentConnections++;
-        console.log(`${new Date().toISOString()} Connection accepted. Current connections: ${currentConnections}`);
+        connection = request.accept('echo-protocol', request.origin);
+    } catch (error) {
+        console.error('Error accepting connection:', error);
+        return;
+    }
 
-        // Set up ping interval to keep connection alive
-        const pingInterval = setInterval(() => {
+    currentConnections++;
+    console.log(`${new Date().toISOString()} Connection accepted. Current connections: ${currentConnections}`);
+
+    // Set up ping interval to keep connection alive
+    const pingInterval = setInterval(() => {
+        try {
             if (connection.connected) {
                 connection.ping();
             }
-        }, 30000);
+        } catch (error) {
+            console.error('Error sending ping:', error);
+            clearInterval(pingInterval);
+        }
+    }, 30000);
 
-        connection.on('message', function(message) {
-            try {
-                if (message.type === 'utf8') {
-                    console.log('Received Message:', message.utf8Data);
-                    connection.sendUTF(message.utf8Data);
-                } else if (message.type === 'binary') {
-                    console.log(`Received Binary Message of ${message.binaryData.length} bytes`);
-                    connection.sendBytes(message.binaryData);
-                }
-            } catch (error) {
-                console.error('Error processing message:', error);
-            }
-        });
+    function handleUTFMessage(message) {
+        try {
+            console.log('Received Message:', message.utf8Data);
+            connection.sendUTF(message.utf8Data);
+        } catch (error) {
+            console.error('Error handling UTF8 message:', error);
+        }
+    }
 
-        connection.on('close', function(reasonCode, description) {
+    function handleBinaryMessage(message) {
+        try {
+            console.log(`Received Binary Message of ${message.binaryData.length} bytes`);
+            connection.sendBytes(message.binaryData);
+        } catch (error) {
+            console.error('Error handling binary message:', error);
+        }
+    }
+
+    connection.on('message', function(message) {
+        if (message.type === 'utf8') {
+            handleUTFMessage(message);
+        } else if (message.type === 'binary') {
+            handleBinaryMessage(message);
+        }
+    });
+
+    connection.on('close', function(reasonCode, description) {
+        try {
             clearInterval(pingInterval);
             currentConnections--;
             console.log(`${new Date().toISOString()} Peer ${connection.remoteAddress} disconnected. Reason: ${reasonCode} - ${description}`);
             console.log(`Current connections: ${currentConnections}`);
-        });
+        } catch (error) {
+            console.error('Error handling connection close:', error);
+            // Ensure connection counter is decremented even if there's an error
+            currentConnections = Math.max(0, currentConnections - 1);
+        }
+    });
 
-        connection.on('error', function(error) {
-            console.error('Connection error:', error);
-        });
-
-    } catch (error) {
-        console.error('Error while handling connection:', error);
-    }
+    connection.on('error', function(error) {
+        console.error('Connection error:', error);
+    });
 });
