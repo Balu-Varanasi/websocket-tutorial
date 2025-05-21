@@ -98,7 +98,9 @@ class WebSocketManager {
     connect() {
         try {
             console.log(`Connecting to ${WS_URL}`);
-            this.client.connect(WS_URL, 'echo-protocol');
+            this.client.connect(WS_URL, 'echo-protocol', 'http://localhost:3000', {
+                origin: 'http://localhost:3000'
+            });
         } catch (error) {
             console.error('Error initiating connection:', error);
             this.scheduleReconnect();

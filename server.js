@@ -8,7 +8,7 @@ dotenv.config();
 
 // Configuration
 const PORT = process.env.PORT || 8080;
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,ws://localhost:8080,null').split(',');
 const MAX_CONNECTIONS = process.env.MAX_CONNECTIONS || 100;
 let currentConnections = 0;
 
@@ -39,6 +39,10 @@ const wsServer = new WebSocketServer({
 // Origin validation
 function originIsAllowed(origin) {
     console.log(`Checking origin: ${origin}`);
+    // Allow null/undefined origins for local development/testing
+    if (!origin) {
+        return true;
+    }
     return ALLOWED_ORIGINS.includes(origin);
 }
 
